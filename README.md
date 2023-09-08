@@ -3,7 +3,10 @@ Tested on macbook
 
 It uses AEC3 [Extracted From WebRTC](https://github.com/ewan-xu/AEC3)
 
+no AEC
 ![no AEC](https://github.com/khomin/webrtc_aec3_qt6_cmake/blob/main/demo/wave1.png)
+
+with AEC
 ![with AEC](https://github.com/khomin/webrtc_aec3_qt6_cmake/blob/main/demo/wave2.png)
 
 How to use
