@@ -1,0 +1,3 @@
+[submodule "AEC3_cmake"]
+	path = AEC3_cmake
+	url = https://github.com/khomin/AEC3_cmake.git
