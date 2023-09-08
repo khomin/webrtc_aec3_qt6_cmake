@@ -1,5 +1,5 @@
 # WebRTC AEC3 fully working demo using Qt6 Audio
-Tested on macbook
+Tested on macbook (vmware windows/linux)
 
 It uses AEC3 [Extracted From WebRTC](https://github.com/ewan-xu/AEC3)
 
@@ -16,7 +16,7 @@ cd ./webrtc_aec3_qt6_cmake
 mkdir build && cd ./build
 
 cmake ../
-make
+make -j8
 ./aec3_qt6
 ```
 
