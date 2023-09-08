@@ -7,27 +7,17 @@ set(CMAKE_C_FLAGS_DEBUG             "-O0")
 set(CMAKE_CXX_FLAGS_DEBUG           "-g")
 set(CMAKE_CXX_FLAGS_RELEASE         "-g")
 set(CMAKE_CXX_FLAGS_DEBUG           "-gdwarf-2")
-#set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY  ${CMAKE_BINARY_DIR})
-#set(CMAKE_LIBRARY_OUTPUT_DIRECTORY  ${CMAKE_BINARY_DIR})
-#set(CMAKE_PDB_OUTPUT_DIRECTORY      ${CMAKE_BINARY_DIR})
-#set(CMAKE_RUNTIME_OUTPUT_DIRECTORY  ${CMAKE_BINARY_DIR})
-
-set(PROJECT                     aec3_qt6)
-set(TARGET_NAME                 ${PROJECT})
-#set(DESTDIR                     ${CMAKE_CURRENT_BINARY_DIR})
-project(${PROJECT}              VERSION 1.0.0)
+set(PROJECT                         aec3_qt6)
+set(TARGET_NAME                     ${PROJECT})
+project(${PROJECT}                  VERSION 1.0.0)
 
 add_compile_options(-Wall -fPIC -Wno-deprecated -fexceptions)
 
 # should be set before ‘project’ statement, otherwise it may not work.
 if(APPLE)
-    if(NOT IOS)
-        set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X deployment version" FORCE)
-        set(DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X deployment version")
-    else()
-        set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum OS X deployment version" FORCE)
-        set(DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum OS X deployment version")
-    endif()
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X deployment version" FORCE)
+    set(DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X deployment version")
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)
 endif()
 
 if(APPLE)
@@ -58,7 +48,6 @@ set(LIBRARIES ${LIBRARIES}
 )
 
 if(APPLE)
-    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)
     set(LIBRARIES ${LIBRARIES}
         webrtc_aec3
         "-framework Cocoa"

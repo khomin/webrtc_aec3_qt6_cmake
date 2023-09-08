@@ -11,13 +11,13 @@ with AEC
 
 How to use
 ```bash
-git clone https://github.com/khomin/AEC3_cmake.git --recurse-submodules
-cd ./AEC3_cmake
+git clone https://github.com/khomin/webrtc_aec3_qt6_cmake.git --recurse-submodules
+cd ./webrtc_aec3_qt6_cmake
 mkdir build && cd ./build
 
 cmake ../
-make -j4
-./aec3_qt6 
+make
+./aec3_qt6
 ```
 
 Expected log
