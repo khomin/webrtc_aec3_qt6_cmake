@@ -5,20 +5,18 @@
 #include "audio_processing/include/audio_processing.h"
 #include "audio_processing/audio_buffer.h"
 #include "audio_processing/high_pass_filter.h"
-
 #include <QMediaDevices>
 #include "QDebug"
 
 IoAudio::IoAudio() {
     m_status = StatusType::Stop;
-
-    m_app = NULL;
-    m_audioSource = NULL;
-    m_audioSink = NULL;
-    m_audioInDevice = NULL;
-    m_audioOutDevice = NULL;
-    m_qobject_thread = NULL;
-    m_api_thread = NULL;
+    m_app = nullptr;
+    m_audioSource = nullptr;
+    m_audioSink = nullptr;
+    m_audioInDevice = nullptr;
+    m_audioOutDevice = nullptr;
+    m_qobject_thread = nullptr;
+    m_api_thread = nullptr;
 
     m_api_thread = QThread::create([&] {
         int sampleSize = MIN_SAMPLE_SIZE;
@@ -26,7 +24,7 @@ IoAudio::IoAudio() {
             //
             // write to speakers
             if(!_audioOutBuf.isEmpty()) {
-                if(m_audioSink != NULL && m_audioSink->bytesFree() >= sampleSize) {
+                if(m_audioSink != nullptr && m_audioSink->bytesFree() >= sampleSize) {
                     auto item = _audioOutBuf.pop(sampleSize);
                     // write to out
                     m_audioOutDevice->write((const char*)item.data(), item.size());
@@ -36,11 +34,12 @@ IoAudio::IoAudio() {
             }
             //
             // read mic
-            auto micData = m_audioInDevice != NULL ? m_audioInDevice->readAll() : QByteArray();
+            auto micData = m_audioInDevice != nullptr ? m_audioInDevice->readAll() : QByteArray();
             if(!micData.isEmpty())  {
                 auto data = std::vector<uint8_t>( micData.size());
                 memcpy(data.data(), micData.data(), micData.size());
                 _micBuf.putData(data);
+                m_audioOutDevice->write((const char*) data.data(), data.size());
             }
             //
             // process data before sending
@@ -63,10 +62,62 @@ IoAudio::IoAudio() {
                 _audioOutBuf.putData(out);
             }
 
-            QThread::msleep(5);
+            QThread::msleep(20);
         }
     });
     m_api_thread->start();
+}
+
+bool IoAudio::initAudio() {
+    QAudioFormat audio_format;
+    audio_info_in = QMediaDevices::defaultAudioInput();
+    audio_info_out = QMediaDevices::defaultAudioOutput();
+
+    audio_format.setSampleRate(SAMPLE_RATE);
+    audio_format.setSampleFormat(QAudioFormat::SampleFormat::Int16);
+
+    audio_format.setChannelCount(1);
+
+    if (!audio_info_in.isFormatSupported(audio_format)) {
+        qDebug("%s: input device does not support format", TAG);
+        return false;
+    }
+    if (!audio_info_out.isFormatSupported(audio_format)) {
+        qDebug("%s: output device does not support default format", TAG);
+        return false;
+    }
+    if(m_audioSource != nullptr) {
+        m_audioSource->stop();
+        m_audioInDevice = nullptr;
+        m_audioSource->deleteLater();
+        m_audioSource = nullptr;
+    }
+    if(m_audioSink != nullptr) {
+        m_audioSink->stop();
+        m_audioOutDevice = nullptr;
+        m_audioSink->deleteLater();
+        m_audioSink = nullptr;
+    }
+    _audio_in = std::make_shared<QAudioInput>();
+    _audio_out = std::make_shared<QAudioOutput>();
+    _audio_in->setDevice(audio_info_in);
+    _audio_out->setDevice(audio_info_out);
+    _audio_in->setVolume(1);
+    _audio_out->setVolume(1);
+
+    auto desc = audio_info_in.description();
+    qDebug("%s: input device: %s", TAG, desc.toStdString().c_str());
+    desc = audio_info_out.description();
+    qDebug("%s: out device: %s", TAG, desc.toStdString().c_str());
+
+    m_audioSink = new QAudioSink(audio_info_in, audio_format);
+    m_audioSource = new QAudioSource(audio_info_out, audio_format);
+    m_audioInDevice = m_audioSource->start();
+    m_audioOutDevice = m_audioSink->start();
+
+    qDebug("%s: sink size: %d", TAG, (int) m_audioSink->bufferSize());
+    qDebug("%s: source size: %d", TAG, (int) m_audioSource->bufferSize());
+    return true;
 }
 
 IoAudio::~IoAudio() {
@@ -77,9 +128,9 @@ IoAudio::~IoAudio() {
     _micBuf.clear();
     _echoBuff.clear();
 
-    if(m_app != NULL) {
+    if(m_app != nullptr) {
         m_app->exit(0);
-        m_app = NULL;
+        m_app = nullptr;
     }
     while(m_api_thread->isRunning() || m_qobject_thread->isRunning()) {
         QThread::msleep(100);
@@ -96,10 +147,10 @@ IoAudio::~IoAudio() {
         m_audioSink->deleteLater();
     }
     destroyAec();
-    m_audioSource = NULL;
-    m_audioSink = NULL;
-    m_audioInDevice = NULL;
-    m_audioOutDevice = NULL;
+    m_audioSource = nullptr;
+    m_audioSink = nullptr;
+    m_audioInDevice = nullptr;
+    m_audioOutDevice = nullptr;
 }
 
 void IoAudio::startAudio() {
@@ -109,13 +160,13 @@ void IoAudio::startAudio() {
     }
     m_qobject_thread = QThread::create([this]{
         int arg = 0;
-        QCoreApplication app(arg, NULL);
-        auto initRes = initAudio(AudioMode::Audio16Khz);
+        QCoreApplication app(arg, nullptr);
+        auto initRes = initAudio();
         if(!initRes) {
             qDebug("%s: startAudio, init with error, return", TAG);
             return 0;
         }
-        initAec(m_mode == AudioMode::Audio16Khz ? 16000 : 8000);
+        initAec(SAMPLE_RATE);
         if(m_status != StatusType::Destroy) {
             m_status = StatusType::Run;
         }
@@ -125,68 +176,12 @@ void IoAudio::startAudio() {
     });
     m_qobject_thread->start();
     // wait for launching qt thread
-    while(m_app == NULL || m_status == StatusType::Destroy) {
+    while(m_app == nullptr || m_status == StatusType::Destroy) {
         QThread::msleep(100);
     }
 }
 
-bool IoAudio::initAudio(AudioMode mode) {
-    QAudioFormat audio_format;
-    m_mode = mode;
-    audio_info_in = QMediaDevices::defaultAudioInput();
-    audio_info_out = QMediaDevices::defaultAudioOutput();
-
-    if(mode == AudioMode::Audio16Khz) {
-        audio_format.setSampleRate(16000);
-        audio_format.setSampleFormat(QAudioFormat::SampleFormat::Int16);
-    } else {
-        audio_format.setSampleRate(8000);
-        audio_format.setSampleFormat(QAudioFormat::SampleFormat::UInt8);
-    }
-    audio_format.setChannelCount(1);
-
-    if (!audio_info_in.isFormatSupported(audio_format)) {
-        qDebug("%s: input device does not support format", TAG);
-        return false;
-    }
-    if (!audio_info_out.isFormatSupported(audio_format)) {
-        qDebug("%s: output device does not support default format", TAG);
-        return false;
-    }
-    if(m_audioSource != NULL) {
-        m_audioSource->stop();
-        m_audioInDevice = NULL;
-        m_audioSource->deleteLater();
-        m_audioSource = NULL;
-    }
-    if(m_audioSink != NULL) {
-        m_audioSink->stop();
-        m_audioOutDevice = NULL;
-        m_audioSink->deleteLater();
-        m_audioSink = NULL;
-    }
-    auto audio_in = std::shared_ptr<QAudioInput>(new QAudioInput());
-    audio_in->setDevice(audio_info_in);
-    auto audio_out = std::shared_ptr<QAudioOutput>(new QAudioOutput());
-    audio_out->setDevice(audio_info_out);
-    audio_in->setVolume(1);
-    audio_out->setVolume(1);
-
-    auto desc = audio_info_in.description();
-    qDebug("%s: input device: %s", TAG, desc.toStdString().c_str());
-    desc = audio_info_out.description();
-    qDebug("%s: out device: %s", TAG, desc.toStdString().c_str());
-
-    m_audioSink = new QAudioSink(audio_format);
-    m_audioOutDevice = m_audioSink->start();
-
-    m_audioSource = new QAudioSource(audio_format);
-    m_audioInDevice = m_audioSource->start();
-
-    qDebug("%s: sink size: %d", TAG, (int)m_audioSink->bufferSize());
-    qDebug("%s: source size: %d", TAG, (int)m_audioSource->bufferSize());
-    return true;
-}
+bool IoAudio::isStarted() const { return m_status == StatusType::Run; }
 
 bool IoAudio::initAec(int sampleRate) {
     std::lock_guard echo_mux(_aecLock);
@@ -196,7 +191,7 @@ bool IoAudio::initAec(int sampleRate) {
     aec_config.filter.export_linear_aec_output = false;
 
     webrtc::EchoCanceller3Factory aec_factory = webrtc::EchoCanceller3Factory(aec_config);
-    echo_controler = aec_factory.Create(sampleRate, channels, channels);
+    echo_controller = aec_factory.Create(sampleRate, channels, channels);
     hp_filter = std::make_shared<webrtc::HighPassFilter>(sampleRate, channels);
 
     webrtc::StreamConfig config = webrtc::StreamConfig(sampleRate, channels, true);
@@ -215,7 +210,7 @@ bool IoAudio::initAec(int sampleRate) {
 
 void IoAudio::aecPutFarEndFrame(std::vector<uint8_t> &in, int samplesCount) {
     std::lock_guard echo_mux(_aecLock);
-    int sampleRate = m_mode == AudioMode::Audio16Khz ? 16000 : 8000;
+    int sampleRate = SAMPLE_RATE;
     size_t samples = std::min(samplesCount, sampleRate / 100);
     if (samples == 0) return;
     size_t nCount = (samplesCount / samples);
@@ -227,7 +222,7 @@ void IoAudio::aecPutFarEndFrame(std::vector<uint8_t> &in, int samplesCount) {
                               webrtc::AudioFrame::kVadActive, channels);
         ref_audio->CopyFrom(&ref_frame);
         hp_filter->Process(ref_audio.get(), false);
-        echo_controler->AnalyzeRender(ref_audio.get());
+        echo_controller->AnalyzeRender(ref_audio.get());
     }
 }
 
@@ -235,7 +230,7 @@ void IoAudio::aecProcess(std::vector<uint8_t> &in,
                          std::vector<uint8_t> &out,
                          int samplesCount) {
     std::lock_guard echo_mux(_aecLock);
-    int sampleRate = m_mode == AudioMode::Audio16Khz ? 16000 : 8000;
+    int sampleRate = SAMPLE_RATE;
     size_t samples = std::min(samplesCount, sampleRate / 100);
     if (samples == 0) return;
     size_t nCount = (samplesCount / samples);
@@ -247,8 +242,8 @@ void IoAudio::aecProcess(std::vector<uint8_t> &in,
                               webrtc::AudioFrame::kVadActive, channels);
         aec_audio->CopyFrom(&aec_frame);
         hp_filter->Process(aec_audio.get(), false);
-        echo_controler->AnalyzeCapture(aec_audio.get());
-        echo_controler->ProcessCapture(aec_audio.get(), true);
+        echo_controller->AnalyzeCapture(aec_audio.get());
+        echo_controller->ProcessCapture(aec_audio.get(), true);
         aec_audio->CopyTo(&aec_frame);
         memcpy(out.data(), aec_frame.data(), samples * 2);
     }
