@@ -39,5 +39,10 @@ Add prefix path to your Qt before cmake ../
 export CMAKE_PREFIX_PATH=~/Qt/6.5.2/macos
 ```
 
+## Sponsorship
+If you found it helpful, consider donating
+
+Ethereum/Arbitrum  `0xD17F0EBf046ab5C0d5a92BDFddf24c38b526AD9F`
+
 ## License
 MIT
