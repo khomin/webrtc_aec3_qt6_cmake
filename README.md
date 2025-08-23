@@ -28,7 +28,7 @@ WARNING: QApplication was not created in the main() thread.
 IoAudio: input device: MacBook Pro Microphone
 IoAudio: out device: MacBook Pro Speakers
 IoAudio: sink size: 8192
-IoAudio: source size: 4096
+IoAudio: source size: 4096    <<< in ubuntu there is 0 which seems to be ok
 ```
 
 In case you see:
