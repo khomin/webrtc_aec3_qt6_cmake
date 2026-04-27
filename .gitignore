@@ -6,3 +6,4 @@ build/**
 /CMakeLists.txt.user
 /CMakeList.txt.autosave
 .idea
+.qtcreator/CMakeLists.txt.user

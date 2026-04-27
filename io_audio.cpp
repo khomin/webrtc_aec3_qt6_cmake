@@ -19,50 +19,51 @@ IoAudio::IoAudio() {
     m_api_thread = nullptr;
 
     m_api_thread = QThread::create([&] {
-        int sampleSize = MIN_SAMPLE_SIZE;
-        while(m_status != StatusType::Destroy) {
-            //
-            // write to speakers
-            if(!_audioOutBuf.isEmpty()) {
-                if(m_audioSink != nullptr && m_audioSink->bytesFree() >= sampleSize) {
-                    auto item = _audioOutBuf.pop(sampleSize);
-                    // write to out
-                    m_audioOutDevice->write((const char*)item.data(), item.size());
-                    // put to echo
-                    _echoBuff.putData(item);
+            int sampleSize = MIN_SAMPLE_SIZE;
+            while(m_status != StatusType::Destroy) {
+                if(m_status == StatusType::Run) {
+                //
+                // write to speakers
+                if(!_audioOutBuf.isEmpty()) {
+                    if(m_audioSink != nullptr && m_audioSink->bytesFree() >= sampleSize) {
+                        auto item = _audioOutBuf.pop(sampleSize);
+                        // write to out
+                        m_audioOutDevice->write((const char*)item.data(), item.size());
+                        // put to echo
+                        _echoBuff.putData(item);
+                    }
+                }
+                //
+                // read mic
+                auto micData = m_audioInDevice != nullptr ? m_audioInDevice->readAll() : QByteArray();
+                if(!micData.isEmpty())  {
+                    auto data = std::vector<uint8_t>( micData.size());
+                    memcpy(data.data(), micData.data(), micData.size());
+                    _micBuf.putData(data);
+                    m_audioOutDevice->write((const char*) data.data(), data.size());
+                }
+                //
+                // process data before sending
+                while(_micBuf.size() >= MIN_SAMPLE_SIZE) {
+                    auto raw = _micBuf.pop(MIN_SAMPLE_SIZE);
+                    auto out = std::vector<uint8_t>(MIN_SAMPLE_SIZE);
+
+                    while(_echoBuff.size() >= MIN_SAMPLE_SIZE) {
+                        auto echoFrame = _echoBuff.pop(MIN_SAMPLE_SIZE);
+                        aecPutFarEndFrame(echoFrame, MIN_SAMPLE_SIZE / 2);
+                    }
+                    aecProcess(raw, out, MIN_SAMPLE_SIZE / 2);
+                    _sendToNetBuf.putData(out);
+                }
+                //
+                // data ready to sent
+                while(_sendToNetBuf.size() >= sampleSize) {
+                    auto out = _sendToNetBuf.pop(sampleSize);
+                    // because of loopback - put data back to speakers
+                    _audioOutBuf.putData(out);
                 }
             }
-            //
-            // read mic
-            auto micData = m_audioInDevice != nullptr ? m_audioInDevice->readAll() : QByteArray();
-            if(!micData.isEmpty())  {
-                auto data = std::vector<uint8_t>( micData.size());
-                memcpy(data.data(), micData.data(), micData.size());
-                _micBuf.putData(data);
-                m_audioOutDevice->write((const char*) data.data(), data.size());
-            }
-            //
-            // process data before sending
-            while(_micBuf.size() >= MIN_SAMPLE_SIZE) {
-                auto raw = _micBuf.pop(MIN_SAMPLE_SIZE);
-                auto out = std::vector<uint8_t>(MIN_SAMPLE_SIZE);
-
-                while(_echoBuff.size() >= MIN_SAMPLE_SIZE) {
-                    auto echoFrame = _echoBuff.pop(MIN_SAMPLE_SIZE);
-                    aecPutFarEndFrame(echoFrame, MIN_SAMPLE_SIZE / 2);
-                }
-                aecProcess(raw, out, MIN_SAMPLE_SIZE / 2);
-                _sendToNetBuf.putData(out);
-            }
-            //
-            // data ready to sent
-            while(_sendToNetBuf.size() >= sampleSize) {
-                auto out = _sendToNetBuf.pop(sampleSize);
-                // because of loopback - put data back to speakers
-                _audioOutBuf.putData(out);
-            }
-
-            QThread::msleep(20);
+            QThread::msleep(5);
         }
     });
     m_api_thread->start();
@@ -110,8 +111,8 @@ bool IoAudio::initAudio() {
     desc = audio_info_out.description();
     qDebug("%s: out device: %s", TAG, desc.toStdString().c_str());
 
-    m_audioSink = new QAudioSink(audio_info_in, audio_format);
-    m_audioSource = new QAudioSource(audio_info_out, audio_format);
+    m_audioSink = new QAudioSink(audio_info_out, audio_format);
+    m_audioSource = new QAudioSource(audio_info_in, audio_format);
     m_audioInDevice = m_audioSource->start();
     m_audioOutDevice = m_audioSink->start();
 
@@ -164,15 +165,14 @@ void IoAudio::startAudio() {
         auto initRes = initAudio();
         if(!initRes) {
             qDebug("%s: startAudio, init with error, return", TAG);
-            return 0;
+            return;
         }
         initAec(SAMPLE_RATE);
         if(m_status != StatusType::Destroy) {
             m_status = StatusType::Run;
         }
         m_app = &app;
-        auto res = app.exec();
-        return res;
+        app.exec();
     });
     m_qobject_thread->start();
     // wait for launching qt thread

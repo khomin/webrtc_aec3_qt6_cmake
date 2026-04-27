@@ -37,15 +37,7 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/buffer.h
 )
 
-
-find_package(QT NAMES Qt6 REQUIRED)
-set(QT Qt${QT_VERSION_MAJOR})
-find_package(${QT} COMPONENTS Core Multimedia REQUIRED)
-set(LIBRARIES ${LIBRARIES}
-    ${QT}::Core
-    ${QT}::Network
-    ${QT}::Multimedia
-)
+find_package(Qt6 REQUIRED COMPONENTS Core Multimedia Gui Widgets)
 
 if(APPLE)
     set(LIBRARIES ${LIBRARIES}
@@ -89,7 +81,8 @@ target_include_directories(${PROJECT} PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/webrtc_AEC3/audio_processing/utility
 )
 
-target_link_libraries(
-    ${PROJECT}
+target_link_libraries(${PROJECT} PUBLIC
     ${LIBRARIES}
+    Qt::Core
+    Qt::Multimedia
 )
