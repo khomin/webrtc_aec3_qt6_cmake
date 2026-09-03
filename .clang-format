@@ -16,4 +16,7 @@ BreakBeforeBraces: Attach
 AllowShortBlocksOnASingleLine: Empty
 AllowShortFunctionsOnASingleLine: Inline
 PointerAlignment: Left
-ColumnLimit: 80
+
+ColumnLimit: 100
+AlignAfterOpenBracket: DontAlign
+BinPackArguments: true

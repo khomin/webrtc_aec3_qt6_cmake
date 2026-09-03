@@ -1,9 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
 
-# message("BTEST_CMAKE_PREFIX_PATH-ENV=$ENV{CMAKE_PREFIX_PATH}")
-# message("BTEST_CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}")
-# set(CMAKE_PREFIX_PATH "/Users/panic/Qt/6.11.0/macos")
-
 set(CMAKE_CXX_STANDARD              20)
 set(CMAKE_CXX_FLAGS_DEBUG           "-O0")
 set(CMAKE_C_FLAGS_DEBUG             "-O0")
@@ -75,13 +71,12 @@ add_subdirectory(./AEC3_cmake)
 
 set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/io_audio.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/io_audio.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/buffer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/aec_processor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/aec_processor.h
     ${CMAKE_CURRENT_SOURCE_DIR}/audio_engine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/audio_engine.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/buffer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/audio_utils.h
 )
 
 find_package(Qt6 REQUIRED COMPONENTS Core Multimedia Gui Widgets)
