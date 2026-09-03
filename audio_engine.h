@@ -65,4 +65,14 @@ private:
 	// Fully valid in C++11 and later:
 	Buffer mMicBuf{SAMPLE_RATE, BYTES_PER_SAMPLE, MAX_BUFFER_MS};
 	Buffer mEchoBuf{SAMPLE_RATE, BYTES_PER_SAMPLE, MAX_BUFFER_MS};
+
+	void renderDashboard(float micDb,
+						 float cleanDb,
+						 float speakerDb,
+						 size_t micBytes,
+						 size_t echoBytes);
+
+	// Timing for 20 FPS HUD updates (50ms interval)
+	std::chrono::steady_clock::time_point mLastHudRenderTime{};
+	static constexpr std::chrono::milliseconds HUD_REFRESH_INTERVAL{50};
 };

@@ -6,6 +6,11 @@
 #include <algorithm>
 #include <cmath>
 
+#include <algorithm>
+#include <cmath>
+#include <iostream>
+#include <string>
+
 // Calculates RMS level in dB (-60.0 dB to 0.0 dB)
 float calculateFrameRmsDb(const int16_t* pcmData, size_t sampleCount) {
 	if (sampleCount == 0)
@@ -26,11 +31,6 @@ float calculateFrameRmsDb(const int16_t* pcmData, size_t sampleCount) {
 	return std::clamp(db, -60.0f, 0.0f);
 }
 
-#include <algorithm>
-#include <cmath>
-#include <iostream>
-#include <string>
-
 void drawConsoleAudioMeter(float rmsLevelDb) {
 	// Convert dB level (-60dB to 0dB) into a bar length (0 to 30 characters)
 	constexpr int BAR_WIDTH = 30;
@@ -47,6 +47,27 @@ void drawConsoleAudioMeter(float rmsLevelDb) {
 	// \r returns cursor to start of line, \033[K clears to end of line
 	std::cout << "\rMic Level: [" << meterBar << emptyBar << "] "
 			  << static_cast<int>(rmsLevelDb) << " dB" << std::flush;
+}
+
+static float calculatePcmRmsDb(const uint8_t* pcmData, size_t sizeBytes) {
+	if (sizeBytes == 0)
+		return -60.0f;
+
+	const int16_t* samples = reinterpret_cast<const int16_t*>(pcmData);
+	size_t sampleCount = sizeBytes / sizeof(int16_t);
+
+	double sumSq = 0.0;
+	for (size_t i = 0; i < sampleCount; ++i) {
+		double norm = samples[i] / 32768.0;
+		sumSq += norm * norm;
+	}
+
+	double rms = std::sqrt(sumSq / sampleCount);
+	if (rms < 1e-6)
+		return -60.0f;
+
+	float db = static_cast<float>(20.0 * std::log10(rms));
+	return std::clamp(db, -60.0f, 0.0f);
 }
 
 AudioEngine::AudioEngine() = default;
@@ -130,8 +151,7 @@ void AudioEngine::stop() {
 
 void AudioEngine::runProcessingLoop() {
 	std::vector<uint8_t> cleanMic(FRAME_BYTES);
-
-	int meterDecimation = 0;
+	std::vector<uint8_t> echoFrame(FRAME_BYTES);
 
 	while (mRunning) {
 		if (!mAudioInDevice || !mAudioOutDevice) {
@@ -153,39 +173,58 @@ void AudioEngine::runProcessingLoop() {
 		// 2. PROCESS IN STRICT 10ms (320-BYTE) STEPS
 		// ------------------------------------------------------------------
 		while (mMicBuf.size() >= FRAME_BYTES) {
-			// Pop 10ms of raw mic input
+			// ------------------------------------------------------------------
+			// 1. SAMPLE METRICS BEFORE POPPING FOR ACCURATE DASHBOARD QUEUES
+			// ------------------------------------------------------------------
+			size_t currentMicQueue = mMicBuf.size();
+			size_t currentEchoQueue = mEchoBuf.size();
+
+			// ------------------------------------------------------------------
+			// 2. FETCH AUDIO FRAMES
+			// ------------------------------------------------------------------
 			auto rawMic = mMicBuf.pop(FRAME_BYTES);
 
-			// Pop 10ms of far-end speaker reference if available
 			if (mEchoBuf.size() >= FRAME_BYTES) {
-				auto echoFrame = mEchoBuf.pop(FRAME_BYTES);
-				mAecProcessor->processFarEnd(echoFrame.data(), FRAME_SAMPLES);
+				echoFrame = mEchoBuf.pop(FRAME_BYTES);
+			} else {
+				std::fill(echoFrame.begin(), echoFrame.end(), 0);
 			}
 
-			// Run WebRTC AEC3
+			// ------------------------------------------------------------------
+			// 3. WEBRTC AEC3 PROCESSING
+			// ------------------------------------------------------------------
+			// Pass far-end speaker reference first
+			mAecProcessor->processFarEnd(echoFrame.data(), FRAME_SAMPLES);
+
+			// Pass near-end mic capture second
 			mAecProcessor->processCapture(rawMic.data(), cleanMic.data(),
 										  FRAME_SAMPLES);
 
-			if (++meterDecimation >= 5) {
-				meterDecimation = 0;
-
-				// Calculate RMS on the clean audio frame
-				const int16_t* pcmPtr =
-					reinterpret_cast<const int16_t*>(cleanMic.data());
-				float currentDb = calculateFrameRmsDb(pcmPtr, FRAME_SAMPLES);
-
-				// Render meter inline
-				drawConsoleAudioMeter(currentDb);
-			}
-
-			// --------------------------------------------------------------
-			// DEMO LOOPBACK: Write clean audio directly to hardware speaker
-			// (Only write if hardware buffer has room)
-			// --------------------------------------------------------------
+			// ------------------------------------------------------------------
+			// 4. DEMO LOOPBACK & ECHO FEED
+			// ------------------------------------------------------------------
 			if (mAudioSink->bytesFree() >= FRAME_BYTES) {
 				mAudioOutDevice->write(
 					reinterpret_cast<const char*>(cleanMic.data()),
 					FRAME_BYTES);
+
+				mEchoBuf.putData(cleanMic);
+			}
+
+			// ------------------------------------------------------------------
+			// 5. RENDER HUD (Using pre-pop sampled queue sizes)
+			// ------------------------------------------------------------------
+			auto now = std::chrono::steady_clock::now();
+			if (now - mLastHudRenderTime >= HUD_REFRESH_INTERVAL) {
+				mLastHudRenderTime = now;
+
+				float rawDb = calculatePcmRmsDb(rawMic.data(), FRAME_BYTES);
+				float cleanDb = calculatePcmRmsDb(cleanMic.data(), FRAME_BYTES);
+				float echoDb = calculatePcmRmsDb(echoFrame.data(), FRAME_BYTES);
+
+				// Pass currentMicQueue and currentEchoQueue to renderDashboard!
+				renderDashboard(rawDb, cleanDb, echoDb, currentMicQueue,
+								currentEchoQueue);
 			}
 		}
 
@@ -194,4 +233,81 @@ void AudioEngine::runProcessingLoop() {
 	}
 
 	std::cout << "AudioEngine: Worker thread exited cleanly." << std::endl;
+}
+
+void AudioEngine::renderDashboard(float micDb,
+								  float cleanDb,
+								  float speakerDb,
+								  size_t micBytes,
+								  size_t echoBytes) {
+	// Colorized VU meter bar helper
+	auto buildVuBar = [](float db, int width = 20) {
+		float norm = (db + 60.0f) / 60.0f;	// Map -60dB..0dB -> 0.0..1.0
+		norm = std::clamp(norm, 0.0f, 1.0f);
+		int filled = static_cast<int>(norm * width);
+
+		std::string bar;
+		for (int i = 0; i < width; ++i) {
+			if (i < filled) {
+				if (i < width * 0.7)
+					bar += "\033[32m█\033[0m";	// Green
+				else if (i < width * 0.9)
+					bar += "\033[33m█\033[0m";	// Yellow
+				else
+					bar += "\033[31m█\033[0m";	// Red
+			} else {
+				bar += "░";
+			}
+		}
+		return bar;
+	};
+
+	// Move cursor to top-left (rewrites lines in-place, preventing flicker)
+	std::cout << "\033[H";
+
+	// Header
+	std::cout << "\033[1;36m==================================================="
+				 "=\033[0m\033[K\n";
+	std::cout << "\033[1;37m   AEC3 Audio Engine Terminal Dashboard            "
+				 " \033[0m\033[K\n";
+	std::cout << "\033[1;36m==================================================="
+				 "=\033[0m\033[K\n\n";
+
+	// Hardware Stats
+	std::cout << "\033[1m[ HARDWARE & FORMAT ]\033[0m\033[K\n";
+	std::cout << " Input Device  : "
+			  << mAudioInfoIn.description().toStdString().substr(0, 30)
+			  << "\033[K\n";
+	std::cout << " Output Device : "
+			  << mAudioInfoOut.description().toStdString().substr(0, 30)
+			  << "\033[K\n";
+	std::cout
+		<< " Format        : 16,000 Hz | 16-bit Mono | 10ms Frames\033[K\n\n";
+
+	// Buffer Health & Latency Indicators (using passed pre-pop values)
+	std::cout << "\033[1m[ BUFFER QUEUES ]\033[0m\033[K\n";
+	std::cout << " Mic Queue     : " << micBytes << " B ";
+	if (micBytes > 1280)
+		std::cout << "\033[1;31m[OVERFLOW WARNING]\033[0m";
+	else
+		std::cout << "\033[32m[OK]\033[0m";
+	std::cout << "\033[K\n";
+
+	std::cout << " Echo Queue    : " << echoBytes << " B ";
+	if (echoBytes > 0)
+		std::cout << "\033[32m[ACTIVE]\033[0m";
+	else
+		std::cout << "\033[33m[SILENCE / STARVED]\033[0m";
+	std::cout << "\033[K\n\n";
+
+	// Real-Time Audio Meters
+	std::cout << "\033[1m[ LIVE AUDIO LEVELS ]\033[0m\033[K\n";
+	std::cout << " Raw Mic In    : [" << buildVuBar(micDb) << "] "
+			  << static_cast<int>(micDb) << " dB\033[K\n";
+	std::cout << " AEC3 Cleaned  : [" << buildVuBar(cleanDb) << "] "
+			  << static_cast<int>(cleanDb) << " dB\033[K\n";
+	std::cout << " Speaker Reference: [" << buildVuBar(speakerDb) << "] "
+			  << static_cast<int>(speakerDb) << " dB\033[K\n";
+
+	std::cout.flush();
 }
