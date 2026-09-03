@@ -1,5 +1,8 @@
-set(CMAKE_VERBOSE_MAKEFILE ON)
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
+
+# message("BTEST_CMAKE_PREFIX_PATH-ENV=$ENV{CMAKE_PREFIX_PATH}")
+# message("BTEST_CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}")
+# set(CMAKE_PREFIX_PATH "/Users/panic/Qt/6.11.0/macos")
 
 set(CMAKE_CXX_STANDARD              20)
 set(CMAKE_CXX_FLAGS_DEBUG           "-O0")
@@ -12,6 +15,46 @@ set(TARGET_NAME                     ${PROJECT})
 project(${PROJECT}                  VERSION 1.0.0)
 
 add_compile_options(-Wall -fPIC -Wno-deprecated -fexceptions)
+
+if(DEFINED ENV{CMAKE_PREFIX_PATH} AND NOT CMAKE_PREFIX_PATH)
+    set(CMAKE_PREFIX_PATH "$ENV{CMAKE_PREFIX_PATH}")
+    message(STATUS "[Qt Auto-Detect] Using CMAKE_PREFIX_PATH from environment: ${CMAKE_PREFIX_PATH}")
+endif()
+
+if(NOT CMAKE_PREFIX_PATH)
+    set(FOUND_QT_PATHS "")
+    if(APPLE)
+        file(GLOB FOUND_QT_PATHS "$ENV{HOME}/Qt/6.*/macos")
+        if(NOT FOUND_QT_PATHS)
+            execute_process(
+                COMMAND brew --prefix qt
+                OUTPUT_VARIABLE BREW_QT_PATH
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET
+            )
+            if(EXISTS "${BREW_QT_PATH}")
+                set(FOUND_QT_PATHS "${BREW_QT_PATH}")
+            endif()
+        endif()
+
+    elseif(WIN32)
+        file(GLOB FOUND_QT_PATHS "C:/Qt/6.*/msvc*_64" "C:/Qt/6.*/mingw*_64")
+    elseif(UNIX)
+        file(GLOB FOUND_QT_PATHS "$ENV{HOME}/Qt/6.*/gcc_64" "/opt/Qt/6.*/gcc_64")
+    endif()
+
+    # If fallback path found, pick the latest version
+    if(FOUND_QT_PATHS)
+        list(SORT FOUND_QT_PATHS ORDER DESCENDING)
+        list(GET FOUND_QT_PATHS 0 LATEST_QT)
+        set(CMAKE_PREFIX_PATH "${LATEST_QT}")
+        message(STATUS "[Qt Auto-Detect] Fallback triggered! Auto-detected Qt SDK at: ${CMAKE_PREFIX_PATH}")
+    else()
+        message(WARNING "[Qt Auto-Detect] CMAKE_PREFIX_PATH is empty and no auto-detected Qt 6 installation was found.")
+    endif()
+else()
+    message(STATUS "[Qt Auto-Detect] Using explicit CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+endif()
 
 # should be set before ‘project’ statement, otherwise it may not work.
 if(APPLE)
@@ -35,6 +78,10 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/io_audio.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/io_audio.h
     ${CMAKE_CURRENT_SOURCE_DIR}/buffer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/aec_processor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/aec_processor.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/audio_engine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/audio_engine.h
 )
 
 find_package(Qt6 REQUIRED COMPONENTS Core Multimedia Gui Widgets)

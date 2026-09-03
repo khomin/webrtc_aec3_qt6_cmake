@@ -1,0 +1,18 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "macos-qt",
+            "displayName": "macOS Qt 6.11",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_PREFIX_PATH": "/Users/panic/Qt/6.11.0/macos"
+            },
+            "environment": {
+                "CMAKE_PREFIX_PATH": "$env{HOME}/Qt/6.11.0/macos"
+            }
+        }
+    ]
+}

@@ -1,43 +1,80 @@
 #ifndef BUFFER_H
 #define BUFFER_H
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <mutex>
 #include <vector>
 
 class Buffer {
 public:
-    void putData(std::vector<uint8_t> in) {
-        std::lock_guard<std::mutex>l (_lock);
-        _data.insert(_data.end(), in.begin(), in.end());
-    }
+	/**
+	 * Constructs a thread-safe audio buffer with explicit capacity bounds.
+	 *
+	 * @param sampleRateHz      Sample rate in Hz (e.g., 16000)
+	 * @param bytesPerSample    Bytes per single sample (e.g., 2 for 16-bit Int)
+	 * @param maxDurationMs     Maximum allowed duration in milliseconds before
+	 * dropping stale data
+	 */
+	Buffer(int sampleRateHz, size_t bytesPerSample, size_t maxDurationMs)
+		: _maxCapacityBytes(calculateCapacityBytes(sampleRateHz,
+												   bytesPerSample,
+												   maxDurationMs)) {}
 
-    bool isEmpty() {
-        std::lock_guard<std::mutex>l (_lock);
-        return _data.empty();
-    }
+	void putData(const std::vector<uint8_t>& in) {
+		std::lock_guard<std::mutex> lock(_lock);
 
-    int size() {
-        std::lock_guard<std::mutex>l (_lock);
-        return _data.size();
-    }
+		// Append incoming bytes
+		_data.insert(_data.end(), in.begin(), in.end());
 
-    std::vector<uint8_t> pop(int size) {
-        std::lock_guard<std::mutex>l (_lock);
-        if(_data.size() >= size) {
-            auto item = std::vector<uint8_t>(_data.begin(), _data.begin() + size);
-            _data.erase(_data.begin(), _data.begin() + size);
-            return item;
-        }
-        return std::vector<uint8_t>();
-    }
+		// Auto-drop oldest bytes if total size exceeds configured max capacity
+		if (_data.size() > _maxCapacityBytes) {
+			size_t overflow = _data.size() - _maxCapacityBytes;
+			_data.erase(_data.begin(), _data.begin() + overflow);
+		}
+	}
 
-    void clear() {
-        std::lock_guard<std::mutex>l (_lock);
-        _data.clear();
-    }
+	bool isEmpty() const {
+		std::lock_guard<std::mutex> lock(_lock);
+		return _data.empty();
+	}
+
+	size_t size() const {
+		std::lock_guard<std::mutex> lock(_lock);
+		return _data.size();
+	}
+
+	std::vector<uint8_t> pop(size_t sizeBytes) {
+		std::lock_guard<std::mutex> lock(_lock);
+		if (_data.size() >= sizeBytes) {
+			std::vector<uint8_t> item(_data.begin(), _data.begin() + sizeBytes);
+			_data.erase(_data.begin(), _data.begin() + sizeBytes);
+			return item;
+		}
+		return {};
+	}
+
+	void clear() {
+		std::lock_guard<std::mutex> lock(_lock);
+		_data.clear();
+	}
+
+	size_t capacityBytes() const { return _maxCapacityBytes; }
+
 private:
-    std::vector<uint8_t> _data;
-    std::mutex _lock;
+	static size_t calculateCapacityBytes(int sampleRateHz,
+										 size_t bytesPerSample,
+										 size_t durationMs) {
+		// Explicit calculation: (samples/sec * bytes/sample * ms) / 1000 ms/sec
+		return (static_cast<size_t>(sampleRateHz) * bytesPerSample *
+				durationMs) /
+			   1000;
+	}
+
+	std::vector<uint8_t> _data;
+	mutable std::mutex _lock;
+	size_t _maxCapacityBytes;
 };
 
-#endif // BUFFER_H
+#endif	// BUFFER_H

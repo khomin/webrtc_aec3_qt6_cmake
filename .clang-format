@@ -1,0 +1,19 @@
+BasedOnStyle: Chromium
+UseTab: Always
+IndentWidth: 4
+TabWidth: 4
+AccessModifierOffset: -4
+
+# --- Empty Line Settings ---
+# Allows you to leave up to 2 consecutive empty lines wherever you want
+MaxEmptyLinesToKeep: 2
+
+# Prevents clang-format from wiping empty lines at the start/end of blocks or namespaces
+KeepEmptyLinesAtStartOfBlocks: true
+
+# --- Standard Chromium Rules ---
+BreakBeforeBraces: Attach
+AllowShortBlocksOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: Inline
+PointerAlignment: Left
+ColumnLimit: 80

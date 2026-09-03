@@ -1,25 +1,44 @@
-#include <string>
-#include <algorithm>
-#include <memory>
-#include <stdlib.h>
-#include <stdio.h>
-#include <iostream>
 #include "io_audio.h"
 
-int main(int argc, char *argv[]) {
-    std::cout << "starting..." << std::endl;
+#include <QThread>
+#include <csignal>
+#include <iostream>
 
-    auto audio = new IoAudio();
-    audio->startAudio();
+namespace {
+std::atomic<bool> gKeepRunning{true};
 
-    while(audio->isStarted()) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
+void signalHandler(int signal) {
+	if (signal == SIGINT || signal == SIGTERM) {
+		gKeepRunning.store(false);
+	}
+}
+}  // namespace
 
-    delete audio;
-    audio = NULL;
+int main(int argc, char* argv[]) {
+	std::cout << "Starting Audio System..." << std::endl;
 
-    std::cout << "end" << std::endl;
+	// 1. Register OS termination signals (Ctrl+C and kill/SIGTERM)
+	std::signal(SIGINT, signalHandler);
+	std::signal(SIGTERM, signalHandler);
 
-    return 0;
+	// 2. Initialize Audio Stack via RAII
+	auto audio = std::make_unique<IoAudio>();
+	audio->start();
+
+	std::cout << "Audio running. Press Ctrl+C to exit." << std::endl;
+
+	// 3. Clean main wait loop — zero CPU load, listens directly for
+	// gKeepRunning
+	while (gKeepRunning.load()) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+
+	// 4. Graceful Cleanup
+	std::cout << "\nCaught signal. Shutting down gracefully..." << std::endl;
+
+	// Unique pointer reset invokes ~IoAudio() -> AudioEngine::stop()
+	audio.reset();
+
+	std::cout << "Audio Engine stopped cleanly. Exiting." << std::endl;
+	return 0;
 }
