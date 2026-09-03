@@ -1,4 +1,5 @@
 #include <QThread>
+#include <QCoreApplication>
 #include <csignal>
 #include <iostream>
 
@@ -15,19 +16,23 @@ void signalHandler(int signal) {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+	QCoreApplication app(argc, argv);
 	std::cout << "Starting ..." << std::endl;
 
 	std::signal(SIGINT, signalHandler);
 	std::signal(SIGTERM, signalHandler);
 
 	auto engine = std::make_unique<AudioEngine>();
-	engine->initialize();
+	if (!engine->initialize()) {
+		return -1;
+	}
 	engine->start();
 
 	std::cout << "Running. Press Ctrl+C to exit." << std::endl;
 
 	while (gKeepRunning.load()) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		QCoreApplication::processEvents();
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}
 	engine.reset();
 
