@@ -1,4 +1,4 @@
-# WebRTC AEC3 fully working using Qt6 Audio
+### WebRTC AEC3 fully working using Qt6 Audio
 
 ![macOS Verified](https://img.shields.io/badge/macOS-x86__64%20%7C%20arm64-brightgreen?style=flat-sqlite&logo=apple)
 ![Linux Verified](https://img.shields.io/badge/Linux-x86__64-brightgreen?style=flat-sqlite&logo=linux)
